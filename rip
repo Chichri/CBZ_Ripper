@@ -1,0 +1,285 @@
+#!/usr/bin/env python
+
+import requests
+import os 
+import shutil
+
+path = os.path.dirname(os.path.abspath(__file__))
+
+def menu():
+
+    header()
+
+    print("Cbz Ripper. Download and make manga cbz's from MangaLife. By Chichri\n")
+
+    command_list()
+    #Prints out initial command list
+    while True:
+
+        dec = input('What would you like to do?\n')
+
+        dec = dec.rstrip()
+
+        if dec == '1':
+            try: 
+                chapnum, pagenum, url = configure() 
+            except:
+                print("Invalid url. Please try again.\n") 
+                continue
+            prepare(chapnum, pagenum, url)
+        elif dec == '2': 
+            info() 
+        elif dec == 'quit':
+            break
+        else:
+            print("I'm sorry, I didn't recognize that command.")
+
+#menu instigates the main functionality loop where cbz can be made and info can be 
+#brought up 
+
+def configure():
+    url = input('Url to configure\n') 
+    if chaptercheck(url) == True: 
+        print("Erroneous url supplied. Please try again.") 
+        chapnum, pagenum, url = configure() 
+    chapindex = input('Chapter index\n') 
+    pageindex = input('Page index\n') 
+    chapnum = url.find(chapindex)
+    pagenum = url.find(pageindex, (chapnum + 3))
+    if chapnum | pagenum == -1: 
+        print("Chapter or page index not found. Only input numbers. Please try again.\n") 
+        chapnum, pagenum, url = configure() 
+    return chapnum, pagenum, url
+
+#configure takes the url and extracts the index of the chapter and page indicators
+#within the url. These are immediatly passed to prepare
+
+def prepare(chapnum, pagenum, url): 
+   volname = input("Name of Volume\n") 
+   chapnumber = input("Number of chapters\n") 
+   try:
+       chapnumber = int(chapnumber)
+   except ValueError:
+       print("Non-number suppplied for nummber of chapters. Please try again.") 
+       prepare(chapnum, pagenum, url) 
+   try:
+       os.mkdir(path + "/" + volname)
+   except FileExistsError: 
+       print("File with that name exists. Please try again.")
+       prepare(chapnum, pagenum, url) 
+   initiatedownload(chapnum, pagenum, url, volname, chapnumber)
+
+#prepare takes the name of the of cbz and the number of chapters it will contain before 
+#instigating the download 
+
+def initiatedownload(chapnum, pagenum, url, volname, chapnumber):
+    page_counter = 0
+    chapter_counter = 0
+    flag = True
+    while flag == True:
+        page_number = page_counter
+        print(url) 
+        response = requests.get(url)
+        file = open(path + "/" + volname + "/" + str(page_number) +  ".png", "wb")
+        file.write(response.content)
+        file.close()
+        print("Downloaded page " + str(page_number) + " chapter " + str(chapter_counter)) 
+        page_counter += 1
+        url = pageflip(pagenum, url) 
+        if chaptercheck(url) == True:
+            print('New chapter detected') 
+            url = chapterflip(chapnum, pagenum, url) 
+            chapter_counter += 1
+            pass 
+        if chapter_counter == chapnumber:
+            flag = False
+            zippit(volname)
+
+#intiatedownload. This is where the bulk of the looping happens, save for a few special cases.
+#The url is iterated through here, and each individual image is downloaded and filed to the 
+#specified directory
+
+def zippit(volname):
+    shutil.make_archive(path + "/" + volname, 'zip', path +  "/", volname) 
+    os.rename(path + "/" + volname + '.zip', path + "/" + volname + '.cbz') 
+
+#zippit compresses the directory containing the images once the chapter number is reached. 
+#It also changes the file extension to cbz. Kinda uneccessary to have it be it's own function, 
+#but whatever I'll call it a "best practice" 
+
+def pageflip(pagenum, url): 
+    strnum =  url[pagenum:(pagenum + 3)]
+    inum = int(strnum) + 1 
+    istrnum = str(inum) 
+    if len(istrnum) == 1: 
+        newpage = '00' + str(inum) 
+    elif len(istrnum) == 2:
+        newpage = '0' + str(inum) 
+    else: 
+        newpage = istrnum 
+    newurl = url[0:pagenum] + newpage + url[pagenum + 3:] 
+    return newurl
+
+#pageflip is where the url is modified to progress through the pages of the content. 
+
+def chaptercheck(url): 
+    response = requests.get(url)
+    if response.encoding != None:
+        #incorrect responses return utf-8
+        return True
+    else:
+        return False 
+
+#chaptercheck checks whether the end of a chapter has been reached to trigger chapter flip 
+#It does this simply by checking whether the encoding of whatever the url returns anything 
+#else then None, which is what the images return
+
+def chapterflip(chapnum,pagenum, url): 
+    decistr = url[chapnum:(chapnum + 4)]
+    newchap = int(decistr) + 1
+    strnewchap = str(newchap) 
+    print(strnewchap) 
+    if len(strnewchap) == 1: 
+        newchap = '000' + strnewchap
+    if len(strnewchap) == 2:
+        newchap = '00' + strnewchap 
+    if len(strnewchap) == 3: 
+        newchap = '0' + strnewchap 
+    if len(strnewchap) == 4: 
+        newchap = strnewchap 
+    newurl = url[0:chapnum] + newchap + "-001" +  url[(pagenum + 3):]
+    return newurl
+
+#chapterflip. Edits the url to change chapters once the end of a chapter has been reached. 
+
+def header():
+    print('  ______   __                        _______   __                                           ')
+    print(' /      \ |  \                      |       \ |  \                                          ')
+    print('|  $$$$$$\| $$____   ________       | $$$$$$$\ \$$  ______    ______    ______    ______    ')
+    print('| $$   \$$| $$    \ |        \      | $$__| $$|  \ /      \  /      \  /      \  /      \   ')
+    print('| $$      | $$$$$$$\ \$$$$$$$$      | $$    $$| $$|  $$$$$$\|  $$$$$$\|  $$$$$$\|  $$$$$$\  ')
+    print('| $$   __ | $$  | $$  /    $$       | $$$$$$$\| $$| $$  | $$| $$  | $$| $$    $$| $$   \$$  ')
+    print('| $$__/  \| $$__/ $$ /  $$$$_       | $$  | $$| $$| $$__/ $$| $$__/ $$| $$$$$$$$| $$        ')
+    print(' \$$    $$| $$    $$|  $$    \      | $$  | $$| $$| $$    $$| $$    $$ \$$     \| $$        ')
+    print('  \$$$$$$  \$$$$$$$  \$$$$$$$$       \$$   \$$ \$$| $$$$$$$ | $$$$$$$   \$$$$$$$ \$$        ')
+    print('                                                  | $$      | $$                            ')
+    print('                                                  | $$      | $$                            ')
+    print('                                                   \$$       \$$                            ') 
+
+#header. Prints the nice header. ASCII art generated by patorjk's TAAG
+
+def command_list():
+    print("""
+    [\033[32m1\033[0m] : Create a Cbz 
+    [\033[32m2\033[0m] : Info
+    quit : close the program
+    """) 
+
+#command_list. Printts the commandlist 
+
+def info():
+    print(""" 
+
+    Hey there! 
+
+    Cbz ripper is a small script that automates downloading images sequentially from MangaLife and
+    converting them into the cbz archive format. I decided to write this script after going through 
+    the tedious task of trying to do what I just described manually. It's far from impossible, of
+    course, but it is extremly monatonous and it leaves room for human error. 
+
+    The main mechanism by which this script functions is by iterating through through a url, downloading 
+    theimage that it leads to, editing the url to proceed to the next page, and repeating the process. This
+    requires you to provide location on where the page and chapter indexs are located within the url so 
+    the program knows where to look when it's iterating. (Think slice notation if you have a passing 
+    familiarity with python.) 
+    
+    Yeah I know. It's ugly, hacky, and ineffcient as all hell but it gets the job done. This script was 
+    originally designed for a specifc manga site, but it could theoretically work with any seires of 
+    images as long as the pages and chapters aren't uniqually named in the url. 
+
+    And look. This program can operate in a bit of legally grey area (because so do all manga scan sites, 
+    so I'll counsel as follows: while I wish that everyone could read the wealth of amazing content that 
+    humans have produced, artists need to be compensated for their work. Obviously I can't control what
+    you will do with this script, but I hope that you recognize that fact and support those who produce 
+    content you enjoy. Even if it's just a hard copy of your favorite issue, it's something. 
+
+    Happy reading! 
+
+    ------------------------------------------------------------------------------------------------------
+    ------------------------------------------Practical Stuff---------------------------------------------
+    ------------------------------------------------------------------------------------------------------
+
+    The first thing this script will ask you to do will be to provide a url. Provide the url to the first 
+    page you want in the Cbz, as this url will be your starting point. It will then ask you for the 
+    "Chapter index" and the "Page index". Provide the chapter and page number listed in the supplied url. The 
+    page number is three characters long and the chapter number is four characters long. Provide the entirety
+    of both, including leading zeros. If thats confusing, it will be explained in greater detail later. 
+    
+    Once you've done that, you'll be asked to provide a volume name and the number of chapters. The volume
+    name doesn't do anything except name the file that this script will produce. You don't only have to do
+    a single volume per file, but thats how I like to organize my content so thats why I called it. Next, 
+    you will be asked to provide the number of chapters. This somewhat stems from the volume organization thing, 
+    but also tells the program how far along to go when its downloading so do figure out how much content you
+    want in your archive file.
+
+    After that, the file will be present in whatever folder you installed this script in. As well as a folder
+    containg each individual image for some fine-tuning if neccisary. Enjoy! 
+
+    ---
+
+    Here's a bit of a Q and A style technical help section for using this program. 
+
+    Q: I'm using this outside of MangaLife and it's not working. Why? 
+
+    A: Tough break! This script was originally written around for scraping just a single individual seires. 
+    I only extended it to be more general purpose with mangalife after realizing how much good content they have. 
+    Other manga sites might have a similiar structure which could conceivably work with this script, but there's 
+    no guarantee. If you know python it shouldn't be too hard to modify the script to work with other indexing patterns, 
+    as long as pages are indexed consistently with no random markers in their hosting url. And if you don't know python,
+    well now's a good opportunity to learn :) 
+
+    Q: I don't really get the whole page and chapter index specification thing, can you explain it in greater detail? 
+
+    A: Ok, allow me to illustrate 
+
+    Imaginary MangaLife url: https://blahblahblahblahblahblahblah0117-001.png 
+
+    See those numbers at the end? Those are the indexs that I'm taking about. You need to supply them to the script so
+    it knows what to iterate on. For the page index, it's three characters. For the chapter index, it's four. So like this. 
+
+    https://blahblahblahblahblahblahblah0117-001.png
+  
+                                        ^    ^ 
+    So for this particular url, I would provide "0117" for the chapter index and "001" for the page index, not "117" for
+    the chapter index, or "1" for the page index. 
+
+    If your wondering, "well what if the page number exceeds three digits or the chapter number exceeds four digits?" the 
+    answer is it won't. To my knowledge, even the longest running mangas in existence haven't exceeded 9999 chapters (the 
+    longest ones on record are currently hovering around 2000 chapters). If they ever do, Mangalife will almost certainly 
+    be defunct by then and the point will be moot. 
+
+    Q: Why does this program generate a folder of the images along with the cbz file? I don't see the point. 
+
+    A: Originally it was just going to be a temporary directory to hold the images before compressing them into a cbz, 
+    but I eventually found use in it as some seires don't include the covers in their scans. Therefore, I could go into
+    the folder and add the cover image personally, just for the aesthetics. To save some headache involving the ordering 
+    of the names of the files (which does influence how the cbz organizes), I would begin these downloads on the final page 
+    of the previous volume (including an extra chapter in the specification to account for this appendation), and then I would 
+    replace that page with the proper cover. Also, it's a quick way to check wheter you got everything right as opposed to 
+    extracting the cbz and checking images.
+
+    Q: Wait, I have to configure my urls everytime I enter them? Is there no way to store my "settings"? 
+
+    A: Nope. Again, this was a orginally written as just a small slapdash script for a single series. Plus, it's just a couple 
+    of keystrokes to specify each new download, so come on. 
+
+    Q: If this script is so ricktey and bad and specific, then why did you go to the trouble of writing all this stuff out? 
+
+    A: I dunno. Guess I'm just weird like that. 
+
+    """) 
+
+#info. Prints out some information on the script
+
+menu()
+

@@ -16,7 +16,7 @@ def menu():
     #Prints out initial command list
     while True:
 
-        dec = input('What would you like to do?\n')
+        dec = input('> ')
 
         dec = dec.rstrip()
 
